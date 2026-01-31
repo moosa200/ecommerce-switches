@@ -1,0 +1,421 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ============= USER & AUTHENTICATION =============
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  phone         String    @unique
+  name          String
+  password      String
+  role          UserRole  @default(CUSTOMER)
+  status        UserStatus @default(ACTIVE)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  addresses     Address[]
+  orders        Order[]
+  wishlist      WishlistItem[]
+  cart          CartItem[]
+  reviews       Review[]
+  
+  @@index([email])
+  @@index([phone])
+}
+
+enum UserRole {
+  CUSTOMER
+  ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  DISABLED
+}
+
+model Address {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  fullName      String
+  phone         String
+  addressLine1  String
+  addressLine2  String?
+  city          String
+  state         String
+  postalCode    String
+  country       String   @default("Pakistan")
+  
+  isDefault     Boolean  @default(false)
+  addressType   AddressType @default(SHIPPING)
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  shippingOrders Order[] @relation("ShippingAddress")
+  billingOrders  Order[] @relation("BillingAddress")
+  
+  @@index([userId])
+}
+
+enum AddressType {
+  SHIPPING
+  BILLING
+  BOTH
+}
+
+// ============= PRODUCT CATALOG =============
+
+model ProductRange {
+  id            String   @id @default(cuid())
+  name          String   @unique
+  slug          String   @unique
+  tagline       String?
+  description   String   @db.Text
+  heroImage     String?
+  highlights    String[]
+  
+  status        Status   @default(ACTIVE)
+  sortOrder     Int      @default(0)
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  products      Product[]
+  
+  @@index([slug])
+}
+
+model Product {
+  id            String   @id @default(cuid())
+  name          String
+  slug          String   @unique
+  productCode   String   @unique
+  
+  rangeId       String
+  range         ProductRange @relation(fields: [rangeId], references: [id])
+  
+  description   String   @db.Text
+  price         Decimal  @db.Decimal(10, 2)
+  stockQuantity Int      @default(0)
+  
+  specifications Json?
+  
+  status        Status   @default(ACTIVE)
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  images        ProductImage[]
+  variants      ProductVariant[]
+  attributes    ProductAttribute[]
+  wishlistItems WishlistItem[]
+  cartItems     CartItem[]
+  orderItems    OrderItem[]
+  reviews       Review[]
+  
+  @@index([slug])
+  @@index([productCode])
+  @@index([rangeId])
+}
+
+model ProductImage {
+  id            String   @id @default(cuid())
+  productId     String
+  product       Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  
+  imageUrl      String
+  altText       String?
+  sortOrder     Int      @default(0)
+  isPrimary     Boolean  @default(false)
+  
+  createdAt     DateTime @default(now())
+  
+  @@index([productId])
+}
+
+model ProductVariant {
+  id            String   @id @default(cuid())
+  productId     String
+  product       Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  
+  variantName   String
+  variantType   String
+  sku           String   @unique
+  
+  priceAdjustment Decimal @db.Decimal(10, 2) @default(0)
+  stockQuantity   Int     @default(0)
+  
+  colorCode     String?
+  imageUrl      String?
+  
+  status        Status   @default(ACTIVE)
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@index([productId])
+  @@index([sku])
+}
+
+model FilterCategory {
+  id            String   @id @default(cuid())
+  name          String   @unique
+  slug          String   @unique
+  sortOrder     Int      @default(0)
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  attributes    FilterAttribute[]
+  
+  @@index([slug])
+}
+
+model FilterAttribute {
+  id            String   @id @default(cuid())
+  categoryId    String
+  category      FilterCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  
+  name          String
+  value         String
+  colorCode     String?
+  sortOrder     Int      @default(0)
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  productAttributes ProductAttribute[]
+  
+  @@index([categoryId])
+}
+
+model ProductAttribute {
+  id            String   @id @default(cuid())
+  productId     String
+  product       Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  
+  attributeId   String
+  attribute     FilterAttribute @relation(fields: [attributeId], references: [id], onDelete: Cascade)
+  
+  createdAt     DateTime @default(now())
+  
+  @@unique([productId, attributeId])
+  @@index([productId])
+  @@index([attributeId])
+}
+
+// ============= CART & WISHLIST =============
+
+model WishlistItem {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  productId     String
+  product       Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  
+  createdAt     DateTime @default(now())
+  
+  @@unique([userId, productId])
+  @@index([userId])
+  @@index([productId])
+}
+
+model CartItem {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  productId     String
+  product       Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  
+  quantity      Int      @default(1)
+  variantId     String?
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@unique([userId, productId, variantId])
+  @@index([userId])
+  @@index([productId])
+}
+
+// ============= ORDERS =============
+
+model Order {
+  id            String   @id @default(cuid())
+  orderNumber   String   @unique
+  
+  userId        String
+  user          User     @relation(fields: [userId], references: [id])
+  
+  shippingAddressId String
+  shippingAddress   Address @relation("ShippingAddress", fields: [shippingAddressId], references: [id])
+  
+  billingAddressId  String
+  billingAddress    Address @relation("BillingAddress", fields: [billingAddressId], references: [id])
+  
+  contactEmail      String
+  contactPhone      String
+  
+  subtotal          Decimal @db.Decimal(10, 2)
+  shippingCost      Decimal @db.Decimal(10, 2)
+  totalAmount       Decimal @db.Decimal(10, 2)
+  
+  orderStatus       OrderStatus @default(PENDING)
+  paymentStatus     PaymentStatus @default(PENDING)
+  
+  invoiceGenerated  Boolean @default(false)
+  invoiceData       Json?
+  
+  notes             String?  @db.Text
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  items             OrderItem[]
+  statusHistory     OrderStatusHistory[]
+  
+  @@index([orderNumber])
+  @@index([userId])
+  @@index([orderStatus])
+}
+
+model OrderItem {
+  id            String   @id @default(cuid())
+  orderId       String
+  order         Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  
+  productId     String
+  product       Product  @relation(fields: [productId], references: [id])
+  
+  productName   String
+  productCode   String
+  variantInfo   String?
+  
+  quantity      Int
+  unitPrice     Decimal  @db.Decimal(10, 2)
+  lineTotal     Decimal  @db.Decimal(10, 2)
+  
+  createdAt     DateTime @default(now())
+  
+  @@index([orderId])
+  @@index([productId])
+}
+
+model OrderStatusHistory {
+  id            String   @id @default(cuid())
+  orderId       String
+  order         Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  
+  status        OrderStatus
+  notes         String?  @db.Text
+  changedBy     String?
+  
+  createdAt     DateTime @default(now())
+  
+  @@index([orderId])
+}
+
+enum OrderStatus {
+  PENDING
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+}
+
+// ============= REVIEWS =============
+
+model Review {
+  id            String   @id @default(cuid())
+  productId     String
+  product       Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  rating        Int
+  title         String?
+  comment       String   @db.Text
+  
+  status        ReviewStatus @default(PENDING)
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@index([productId])
+  @@index([userId])
+  @@index([status])
+}
+
+enum ReviewStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+// ============= ELECTRICIAN BOOKINGS =============
+
+model ElectricianBooking {
+  id            String   @id @default(cuid())
+  
+  customerName  String
+  phone         String
+  email         String
+  address       String   @db.Text
+  
+  preferredDate DateTime
+  preferredTime String
+  message       String?  @db.Text
+  
+  bookingStatus BookingStatus @default(PENDING)
+  
+  adminNotes    String?  @db.Text
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@index([bookingStatus])
+  @@index([createdAt])
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+}
+
+// ============= SYSTEM SETTINGS =============
+
+model SystemSettings {
+  id            String   @id @default(cuid())
+  key           String   @unique
+  value         String   @db.Text
+  description   String?
+  
+  updatedAt     DateTime @updatedAt
+  
+  @@index([key])
+}
+
+enum Status {
+  ACTIVE
+  INACTIVE
+}
